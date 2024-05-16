@@ -3321,19 +3321,13 @@ MAV_RESULT GCS_MAVLINK::handle_preflight_reboot(const mavlink_command_int_t &pac
 #if AP_BATTERY_ENABLED
     // Check if shutdown is requested
     if(is_equal(packet.param1, 2.0f)){
-        // If the battery monitor in use doesnt support shutdown
+        // If the battery monitor in use doesn't support shutdown
         if(!AP::battery().can_shutdown())
             return MAV_RESULT_FAILED;
 
-        // send ack before we shutdown
-        mavlink_msg_command_ack_send(chan, packet.command, MAV_RESULT_ACCEPTED,
-                                 0, 0,
-                                 msg.sysid,
-                                 msg.compid);
-
         AP::battery().shutdown();
 
-        return MAV_RESULT_FAILED;
+        return MAV_RESULT_ACCEPTED;
     }
 #endif
 
