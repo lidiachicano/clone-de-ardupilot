@@ -1084,9 +1084,9 @@ void AP_TECS::_update_pitch(void)
         // @Field: PEW: Potential energy weighting
         // @Field: KEW: Kinetic energy weighting
         // @Field: EBD: Energy balance demand
-        // @Field: EBE: Energy balance error
+        // @Field: EBE: Energy balance estimate
         // @Field: EBDD: Energy balance rate demand
-        // @Field: EBDE: Energy balance rate error
+        // @Field: EBDE: Energy balance rate estimate
         // @Field: EBDDT: Energy balance rate demand + Energy balance rate error*pitch_damping
         // @Field: Imin: Minimum integrator value
         // @Field: Imax: Maximum integrator value
