@@ -836,9 +836,7 @@ float AP_TECS::_get_i_gain(void)
 {
     float i_gain = _integGain;
     if (_in_takeoff_first_stage() || _flight_stage == AP_FixedWing::FlightStage::ABORT_LANDING) {
-        if (!is_zero(_integGain_takeoff)) {
-            i_gain = _integGain_takeoff;
-        }
+        i_gain = _integGain_takeoff;
     } else if (_flags.is_doing_auto_land) {
         if (!is_zero(_integGain_land)) {
             i_gain = _integGain_land;
