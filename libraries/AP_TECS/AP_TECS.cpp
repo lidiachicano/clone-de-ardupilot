@@ -1169,7 +1169,7 @@ void AP_TECS::_initialise_states(int32_t ptchMinCO_cd, float hgt_afe)
         _flags.badDescent     = false;
 
         if (_in_takeoff_first_stage()) {
-            _post_TO_hgt_offset   = _climb_rate * _hgt_dem_tconst; // Replacement prevents oscillating hgt_rate_dem.
+            _post_TO_hgt_offset   = _climb_rate_limit * _hgt_dem_tconst; // Replacement prevents oscillating hgt_rate_dem.
             _TAS_dem_adj = _TAS_dem;
             _max_climb_scaler = 1.0f;
             _max_sink_scaler = 1.0f;
