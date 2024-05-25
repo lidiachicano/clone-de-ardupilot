@@ -2345,8 +2345,8 @@ function vehicle:set_velocity_match(param1) end
 function vehicle:nav_scripting_enable(param1) end
 
 -- desc sets autopilot nav speed (Copter and Rover)
----@param param1 number
----@return boolean
+---@param param1 number -- desired speed in m/s 
+---@return boolean  -- success
 function vehicle:set_desired_speed(param1) end
 
 -- desc
@@ -3334,10 +3334,6 @@ function follow:get_target_sysid() end
 -- desc
 ---@return float
 function follow:get_distance_to_target() end
-
--- desc
----@class scripting
-scripting = {}
 
 -- desc
 function scripting:restart_all() end
