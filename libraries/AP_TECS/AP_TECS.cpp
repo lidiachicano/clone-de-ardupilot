@@ -1169,7 +1169,6 @@ void AP_TECS::_initialise_states(int32_t ptchMinCO_cd, float hgt_afe)
         _hgt_dem_in_prev      = hgt_afe;
         _hgt_dem_in_raw       = hgt_afe;
         _TAS_dem_adj          = _TAS_dem;
-        _flags.reset          = true;
         _post_TO_hgt_offset   = _climb_rate * _hgt_dem_tconst;
         _flags.underspeed     = false;
         _flags.badDescent     = false;
@@ -1179,11 +1178,17 @@ void AP_TECS::_initialise_states(int32_t ptchMinCO_cd, float hgt_afe)
 
         _pitch_demand_lpf.reset(_ahrs.get_pitch());
         _pitch_measured_lpf.reset(_ahrs.get_pitch());
+
+        if (!_reset_after_takeoff) {
+            _flags.reset          = true;
+            _reset_after_takeoff  = true;
+        }
     }
 
     if (_flight_stage != AP_FixedWing::FlightStage::TAKEOFF && _flight_stage != AP_FixedWing::FlightStage::ABORT_LANDING) {
         // reset takeoff speed flag when not in takeoff
         _flags.reached_speed_takeoff = false;
+        _reset_after_takeoff = false;
     }
 }
 

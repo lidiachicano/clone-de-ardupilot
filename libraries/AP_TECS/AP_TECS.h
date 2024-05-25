@@ -419,6 +419,9 @@ private:
     // need to reset on next loop
     bool _need_reset;
 
+    // Checks if we reset at the beginning of takeoff.
+    bool _reset_after_takeoff{false};
+
     float _SKE_weighting;
 
     AP_Int8 _use_synthetic_airspeed;
