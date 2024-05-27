@@ -481,4 +481,8 @@ private:
 
     // current time constant
     float timeConstant(void) const;
+
+    // Reply if we are in the first stage of a takeoff
+    // Corresponds to the initial full-throttle segment
+    bool _in_takeoff_first_stage(void);
 };
