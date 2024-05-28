@@ -1255,7 +1255,12 @@ void AP_TECS::update_pitch_throttle(int32_t hgt_dem_cm,
     } else {
         _THRmaxf  = aparm.throttle_max * 0.01f;
     }
-    _THRminf  = aparm.throttle_min * 0.01f;
+    // Apply at least trim throttle during the whole takeoff climb.
+    if (_flight_stage == AP_FixedWing::FlightStage::TAKEOFF ) {
+        _THRminf = aparm.throttle_cruise * 0.01f;
+    } else { // Otherwise, during normal situations let regular limit.
+        _THRminf = aparm.throttle_min * 0.01f;
+    }
 
     // min of 1% throttle range to prevent a numerical error
     _THRmaxf = MAX(_THRmaxf, _THRminf+0.01);
