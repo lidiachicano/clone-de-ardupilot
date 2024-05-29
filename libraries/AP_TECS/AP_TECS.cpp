@@ -222,7 +222,7 @@ const AP_Param::GroupInfo AP_TECS::var_info[] = {
 
     // @Param: TKOFF_IGAIN
     // @DisplayName: Controller integrator during takeoff
-    // @Description: This is the integrator gain on the control loop during takeoff. When set to 0 then TECS_INTEG_GAIN is used. Increase to increase the rate at which speed and height offsets are trimmed out. Typically values higher than TECS_INTEG_GAIN work best
+    // @Description: This is the integrator gain on the control loop during takeoff. Increase to increase the rate at which speed and height offsets are trimmed out.
     // @Range: 0.0 0.5
     // @Increment: 0.02
     // @User: Advanced
