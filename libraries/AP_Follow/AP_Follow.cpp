@@ -168,6 +168,26 @@ void AP_Follow::clear_offsets_if_required()
 // get target's estimated location
 bool AP_Follow::get_target_location_and_velocity(Location &loc, Vector3f &vel_ned) const
 {
+    Vector3p pos_ned;
+    Vector3f local_vel_ned;  // so we either change both return parameters or neither
+    if (!get_target_position_and_velocity(pos_ned, local_vel_ned)) {
+        return false;
+    }
+    if (!AP::ahrs().get_location_from_origin_offset(loc, pos_ned * 0.01)) {
+        return false;
+    }
+    vel_ned = local_vel_ned;
+
+    if (_alt_type == AP_FOLLOW_ALTITUDE_TYPE_RELATIVE) {
+        loc.change_alt_frame(Location::AltFrame::ABOVE_HOME);
+    }
+
+    return true;
+}
+
+// get target's estimated location and velocity, both NED SI from origin
+bool AP_Follow::get_target_position_and_velocity(Vector3p &pos_ned, Vector3f &vel_ned) const
+{
     // exit immediately if not enabled
     if (!_enabled) {
         return false;
@@ -187,16 +207,17 @@ bool AP_Follow::get_target_location_and_velocity(Location &loc, Vector3f &vel_ne
     }
 
     // project the vehicle position
-    Location last_loc = _target_location;
-    last_loc.offset(vel_ned.x * dt, vel_ned.y * dt);
-    last_loc.alt -= vel_ned.z * 100.0f * dt; // convert m/s to cm/s, multiply by dt.  minus because NED
+    Vector3p projected_pos_ned = _target_position_ned;
+    const Vector3p vel_ned_p { vel_ned.x, vel_ned.y, vel_ned.z };
+    projected_pos_ned += vel_ned_p * dt;
 
     // return latest position estimate
-    loc = last_loc;
+    pos_ned = projected_pos_ned;
     return true;
 }
 
 // get distance vector to target (in meters) and target's velocity all in NED frame
+// FIXME: use the target_position_ned vector!
 bool AP_Follow::get_target_dist_and_vel_ned(Vector3f &dist_ned, Vector3f &dist_with_offs, Vector3f &vel_ned)
 {
     // get our location
@@ -272,27 +293,40 @@ bool AP_Follow::get_target_heading_deg(float &heading) const
     return true;
 }
 
-// handle mavlink DISTANCE_SENSOR messages
-void AP_Follow::handle_msg(const mavlink_message_t &msg)
+// returns true if we should extract information from msg
+bool AP_Follow::should_handle_message(const mavlink_message_t &msg) const
 {
     // exit immediately if not enabled
     if (!_enabled) {
-        return;
+        return false;
     }
 
     // skip our own messages
     if (msg.sysid == mavlink_system.sysid) {
-        return;
+        return false;
     }
 
     // skip message if not from our target
     if (_sysid != 0 && msg.sysid != _sysid) {
-        if (_automatic_sysid) {
-            // maybe timeout who we were following...
-            if ((_last_location_update_ms == 0) || (AP_HAL::millis() - _last_location_update_ms > AP_FOLLOW_SYSID_TIMEOUT_MS)) {
-                _sysid.set(0);
-            }
+        return false;
+    }
+
+    return true;
+}
+
+// handle mavlink DISTANCE_SENSOR messages
+void AP_Follow::handle_msg(const mavlink_message_t &msg)
+{
+    // this method should be called from an "update()" method:
+    if (_automatic_sysid) {
+        // maybe timeout who we were following...
+        if ((_last_location_update_ms == 0) ||
+            (AP_HAL::millis() - _last_location_update_ms > AP_FOLLOW_SYSID_TIMEOUT_MS)) {
+            _sysid.set(0);
         }
+    }
+
+    if (!should_handle_message(msg)) {
         return;
     }
 
@@ -301,15 +335,34 @@ void AP_Follow::handle_msg(const mavlink_message_t &msg)
 
     switch (msg.msgid) {
     case MAVLINK_MSG_ID_GLOBAL_POSITION_INT: {
+        updated = handle_global_position_int_message(msg);
+        break;
+    }
+    case MAVLINK_MSG_ID_FOLLOW_TARGET: {
+        updated = handle_follow_target_message(msg);
+        break;
+    }
+    }
+
+    if (updated) {
+#if HAL_LOGGING_ENABLED
+        Log_Write_FOLL();
+#endif
+    }
+}
+
+bool AP_Follow::handle_global_position_int_message(const mavlink_message_t &msg)
+{
         // decode message
         mavlink_global_position_int_t packet;
         mavlink_msg_global_position_int_decode(&msg, &packet);
 
         // ignore message if lat and lon are (exactly) zero
         if ((packet.lat == 0 && packet.lon == 0)) {
-            return;
+            return false;
         }
 
+        Location _target_location;
         _target_location.lat = packet.lat;
         _target_location.lng = packet.lon;
 
@@ -321,6 +374,10 @@ void AP_Follow::handle_msg(const mavlink_message_t &msg)
             // absolute altitude
             _target_location.set_alt_cm(packet.alt / 10, Location::AltFrame::ABSOLUTE);
         }
+        if (!_target_location.get_vector_from_origin_NEU(_target_position_ned)) {
+            return false;
+        }
+        _target_position_ned.z = -_target_position_ned.z; // NEU->NED
 
         _target_velocity_ned.x = packet.vx * 0.01f; // velocity north
         _target_velocity_ned.y = packet.vy * 0.01f; // velocity east
@@ -337,35 +394,33 @@ void AP_Follow::handle_msg(const mavlink_message_t &msg)
             _sysid.set(msg.sysid);
             _automatic_sysid = true;
         }
-        updated = true;
-        break;
-    }
-    case MAVLINK_MSG_ID_FOLLOW_TARGET: {
+        return true;
+}
+
+bool AP_Follow::handle_follow_target_message(const mavlink_message_t &msg)
+{
         // decode message
         mavlink_follow_target_t packet;
         mavlink_msg_follow_target_decode(&msg, &packet);
 
         // ignore message if lat and lon are (exactly) zero
         if ((packet.lat == 0 && packet.lon == 0)) {
-            return;
+            return false;
         }
         // require at least position
         if ((packet.est_capabilities & (1<<0)) == 0) {
-            return;
+            return false;
         }
 
-        Location new_loc = _target_location;
+        Location new_loc;
         new_loc.lat = packet.lat;
         new_loc.lng = packet.lon;
         new_loc.set_alt_cm(packet.alt*100, Location::AltFrame::ABSOLUTE);
 
-        // FOLLOW_TARGET is always AMSL, change the provided alt to
-        // above home if we are configured for relative alt
-        if (_alt_type == AP_FOLLOW_ALTITUDE_TYPE_RELATIVE &&
-            !new_loc.change_alt_frame(Location::AltFrame::ABOVE_HOME)) {
-            return;
+        if (!new_loc.get_vector_from_origin_NEU(_target_position_ned)) {
+            return false;
         }
-        _target_location = new_loc;
+        _target_position_ned.z = -_target_position_ned.z; // NEU->NED
 
         if (packet.est_capabilities & (1<<1)) {
             _target_velocity_ned.x = packet.vel[0]; // velocity north
@@ -391,17 +446,24 @@ void AP_Follow::handle_msg(const mavlink_message_t &msg)
             _sysid.set(msg.sysid);
             _automatic_sysid = true;
         }
-        updated = true;
-        break;
-    }
-    }
 
-    if (updated) {
+        return true;
+}
+
+// write out an onboard-log message to help diagnose follow problems:
 #if HAL_LOGGING_ENABLED
+void AP_Follow::Log_Write_FOLL()
+{
         // get estimated location and velocity
         Location loc_estimate{};
         Vector3f vel_estimate;
         UNUSED_RESULT(get_target_location_and_velocity(loc_estimate, vel_estimate));
+
+        Location _target_location;
+        UNUSED_RESULT(AP::ahrs().get_location_from_origin_offset(_target_location, _target_position_ned * 0.01));
+        if (_alt_type == AP_FOLLOW_ALTITUDE_TYPE_RELATIVE) {
+            _target_location.change_alt_frame(Location::AltFrame::ABOVE_HOME);
+        }
 
         // log lead's estimated vs reported position
 // @LoggerMessage: FOLL
@@ -432,9 +494,8 @@ void AP_Follow::handle_msg(const mavlink_message_t &msg)
                                                loc_estimate.lng,
                                                loc_estimate.alt
                                                );
-#endif
-    }
 }
+#endif  // HAL_LOGGING_ENABLED
 
 // get velocity estimate in m/s in NED frame using dt since last update
 bool AP_Follow::get_velocity_ned(Vector3f &vel_ned, float dt) const
@@ -504,17 +565,40 @@ void AP_Follow::clear_dist_and_bearing_to_target()
     _bearing_to_target = 0.0f;
 }
 
+// get target's estimated origin-relative-position and velocity (both
+// in SI NED), with offsets added
+bool AP_Follow::get_target_position_and_velocity_ofs(Vector3p &pos_ned, Vector3f &vel_ned) const
+{
+    Vector3f ofs_ned;
+    if (!get_offsets_ned(ofs_ned)) {
+        return false;
+    }
+    if (!get_target_position_and_velocity_ofs(pos_ned, vel_ned)) {
+        return false;
+    }
+    // can't add Vector3p and Vector3f directly:
+    pos_ned.x += ofs_ned.x;
+    pos_ned.y += ofs_ned.y;
+    pos_ned.z += ofs_ned.z;
+    return true;
+}
+
 // get target's estimated location and velocity (in NED), with offsets added
 bool AP_Follow::get_target_location_and_velocity_ofs(Location &loc, Vector3f &vel_ned) const
 {
-    Vector3f ofs;
-    if (!get_offsets_ned(ofs) ||
-        !get_target_location_and_velocity(loc, vel_ned)) {
+    Vector3p pos_ned;
+    Vector3f local_vel_ned;  // so we either change both return parameters or neither
+    if (!get_target_position_and_velocity_ofs(pos_ned, local_vel_ned)) {
         return false;
     }
-    // apply offsets
-    loc.offset(ofs.x, ofs.y);
-    loc.alt -= ofs.z*100;
+    if (!AP::ahrs().get_location_from_origin_offset(loc, pos_ned * 0.01)) {
+        return false;
+    }
+    if (_alt_type == AP_FOLLOW_ALTITUDE_TYPE_RELATIVE) {
+        loc.change_alt_frame(Location::AltFrame::ABOVE_HOME);
+    }
+
+    vel_ned = local_vel_ned;
     return true;
 }
 
