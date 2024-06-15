@@ -499,10 +499,12 @@ void AP_InertialSensor_Invensense::update_filters()
 
 void AP_InertialSensor_Invensense::set_primary_gyro(uint8_t instance)
 {
+#if AP_INERTIALSENSOR_RATE_LOOP_WINDOW_ENABLED
     if (!_imu.use_rate_loop_gyro_samples()) {
         return;
     }
     _dev->set_periodic_minimum(instance == _gyro_instance ? 0 : 100);
+#endif
 }
 
 /*
