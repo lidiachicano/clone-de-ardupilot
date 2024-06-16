@@ -10,6 +10,7 @@
 #include "AP_BattMonitor_SMBus_Generic.h"
 #include "AP_BattMonitor_SMBus_Maxell.h"
 #include "AP_BattMonitor_SMBus_Rotoye.h"
+#include "AP_BattMonitor_SMBus_TIBQ.h"
 #include "AP_BattMonitor_Bebop.h"
 #include "AP_BattMonitor_ESC.h"
 #include "AP_BattMonitor_SMBus_SUI.h"
@@ -514,6 +515,11 @@ AP_BattMonitor::init()
 #if AP_BATTERY_SMBUS_ROTOYE_ENABLED
             case Type::Rotoye:
                 drivers[instance] = NEW_NOTHROW AP_BattMonitor_SMBus_Rotoye(*this, state[instance], _params[instance]);
+                break;
+#endif
+#if AP_BATTERY_SMBUS_TIBQ_ENABLED
+            case Type::TIBQ:
+                drivers[instance] = NEW_NOTHROW AP_BattMonitor_SMBus_TIBQ(*this, state[instance], _params[instance]);
                 break;
 #endif
 #if AP_BATTERY_SMBUS_NEODESIGN_ENABLED
@@ -1163,6 +1169,61 @@ bool AP_BattMonitor::handle_scripting(uint8_t idx, const BattMonitorScript_State
     return drivers[idx]->handle_scripting(_state);
 }
 #endif
+
+// returns true if the battery has shutdown functionality
+bool AP_BattMonitor::can_shutdown(uint8_t instance) const {
+    if (instance >= _num_instances || drivers[instance] == nullptr) {
+        return false;
+    }
+
+    return drivers[instance]->can_shutdown();
+}
+
+// returns true if all connected batteries have shutdown functionality
+bool AP_BattMonitor::can_shutdown() const {
+    if(_num_instances == 0){
+        return false;
+    }
+
+    for (uint8_t i=0; i< _num_instances; i++) {
+        if (configured_type(i) != Type::NONE && !can_shutdown(i)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// attempts to shut down a battery (if supported)
+void AP_BattMonitor::shutdown(uint8_t instance){
+    if (instance < _num_instances && drivers[instance] != nullptr) {
+        drivers[instance]->shutdown();
+    }
+}
+
+// attempts to shut down all batteries that support doing so
+void AP_BattMonitor::shutdown(){
+    if(_num_instances == 0){
+        return;
+    }
+
+    for (uint8_t i=0; i< _num_instances; i++) {
+        // skip the primary battery for now
+        if(i == AP_BATT_PRIMARY_INSTANCE) {
+            continue;
+        }
+
+        if (configured_type(i) != Type::NONE) {
+            shutdown(i);
+        }
+    }
+
+    // shutdown the primary battery last
+    if (configured_type(AP_BATT_PRIMARY_INSTANCE) != Type::NONE && can_shutdown(AP_BATT_PRIMARY_INSTANCE)) {
+        shutdown(AP_BATT_PRIMARY_INSTANCE);
+    }
+}
+
 
 namespace AP {
 
