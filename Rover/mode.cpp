@@ -44,7 +44,10 @@ bool Mode::enter()
 
     // initialisation common to all modes
     if (ret) {
-        set_reversed(false);
+        // reset reversed for autopilot mode except auto
+        if (is_autopilot_mode() && mode_number() != Mode::Number::AUTO) {
+            set_reversed(false);
+        }
 
         // clear sailboat tacking flags
         g2.sailboat.clear_tack();

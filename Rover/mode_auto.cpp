@@ -13,6 +13,11 @@ bool ModeAuto::_enter()
     // initialise waypoint navigation library
     g2.wp_nav.init();
 
+    // reset reversed
+    if (!mission.is_resume()) {
+        g2.wp_nav.set_reversed(false);
+    }
+
     // other initialisation
     auto_triggered = false;
 
