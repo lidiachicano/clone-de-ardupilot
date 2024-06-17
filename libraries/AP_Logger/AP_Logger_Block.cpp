@@ -132,11 +132,6 @@ bool AP_Logger_Block::_WritePrioritisedBlock(const void *pBuffer, uint16_t size,
         return false;
     }
 
-    if (!WriteBlockCheckStartupMessages()) {
-        _dropped++;
-        return false;
-    }
-
     if (!write_sem.take(1)) {
          _dropped++;
         return false;
